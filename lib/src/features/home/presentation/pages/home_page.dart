@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import 'add_feed_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -75,7 +76,13 @@ class _HomePageState extends State<HomePage> {
         width: 72,
         height: 72,
         child: FloatingActionButton(
-          onPressed: () {},
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AddFeedPage(),
+              ),
+            );
+          },
           backgroundColor: Colors.transparent,
           shape: const CircleBorder(),
           clipBehavior: Clip.antiAlias,
@@ -442,7 +449,7 @@ class _FeedCard extends StatelessWidget {
               children: [
                 Container(
                   width: double.infinity,
-                  height: 450,
+                  height: 460,
                   decoration: BoxDecoration(
                     color: const Color(0xFF2C2C2C),
                   ),
@@ -487,7 +494,7 @@ class _FeedCard extends StatelessWidget {
                         ? description.replaceAll('... See More', '...')
                         : description,
                     style:  TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       fontWeight: FontWeight.w400,
                       color: Colors.white.withOpacity(0.6),
                       height: 1.4,
@@ -497,7 +504,7 @@ class _FeedCard extends StatelessWidget {
                     TextSpan(
                       text: ' See More',
                       style: const TextStyle(
-                        fontSize: 12,
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: Colors.white,
                         decorationColor: Colors.white,
