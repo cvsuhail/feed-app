@@ -54,6 +54,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 400;
+    final isMediumScreen = screenWidth >= 400 && screenWidth < 600;
+    
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -74,24 +78,29 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             child: SlideTransition(
               position: _slideAnimation,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                padding: EdgeInsets.symmetric(
+                  horizontal: isSmallScreen ? 16 : isMediumScreen ? 20 : 24,
+                  vertical: isSmallScreen ? 16 : 24,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    const SizedBox(height: 20),
-                    _Header(),
-                    const SizedBox(height: 12),
-                    _Subtitle(),
-                    const SizedBox(height: 36),
-                    _PhoneRow(),
+                    SizedBox(height: isSmallScreen ? 16 : 20),
+                    _Header(isSmallScreen: isSmallScreen),
+                    SizedBox(height: isSmallScreen ? 8 : 12),
+                    _Subtitle(isSmallScreen: isSmallScreen),
+                    SizedBox(height: isSmallScreen ? 24 : 36),
+                    _PhoneRow(isSmallScreen: isSmallScreen),
                     const Spacer(),
                     Center(
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 240),
+                        constraints: BoxConstraints(
+                          maxWidth: isSmallScreen ? 200 : isMediumScreen ? 220 : 240,
+                        ),
                         child: const _ContinueButton(),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    SizedBox(height: isSmallScreen ? 16 : 24),
                     const SizedBox.shrink(),
                   ],
                 ),
@@ -105,6 +114,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 }
 
 class _Header extends StatelessWidget {
+  const _Header({required this.isSmallScreen});
+  final bool isSmallScreen;
+
   @override
   Widget build(BuildContext context) {
     return TweenAnimationBuilder<double>(
@@ -121,10 +133,10 @@ class _Header extends StatelessWidget {
           ),
         );
       },
-      child: const Text(
+      child: Text(
         'Enter Your\nMobile Number',
         style: TextStyle(
-          fontSize: 23,
+          fontSize: isSmallScreen ? 20 : 23,
           fontWeight: FontWeight.w900,
           height: 1.2,
           color: Colors.white,
@@ -135,13 +147,16 @@ class _Header extends StatelessWidget {
 }
 
 class _Subtitle extends StatelessWidget {
+  const _Subtitle({required this.isSmallScreen});
+  final bool isSmallScreen;
+
   @override
   Widget build(BuildContext context) {
-    return const Text(
+    return Text(
       'Lorem ipsum dolor sit amet consectetur. Porta at id hac vitae. Et tortor at vehicula euismod mi viverra.',
       style: TextStyle(
-        color: Color(0xFF9E9E9E),
-        fontSize: 12,
+        color: const Color(0xFF9E9E9E),
+        fontSize: isSmallScreen ? 11 : 12,
         height: 1.5,
         fontWeight: FontWeight.w200,
       ),
@@ -150,7 +165,8 @@ class _Subtitle extends StatelessWidget {
 }
 
 class _PhoneRow extends StatefulWidget {
-  const _PhoneRow();
+  const _PhoneRow({required this.isSmallScreen});
+  final bool isSmallScreen;
 
   @override
   State<_PhoneRow> createState() => _PhoneRowState();
@@ -179,11 +195,15 @@ class _PhoneRowState extends State<_PhoneRow> {
   @override
   Widget build(BuildContext context) {
     final AuthProvider provider = context.watch<AuthProvider>();
+    final countryCodeWidth = widget.isSmallScreen ? 70.0 : 86.0;
+    final containerHeight = widget.isSmallScreen ? 50.0 : 56.0;
+    final spacing = widget.isSmallScreen ? 12.0 : 20.0;
+    
     return Row(
       children: <Widget>[
         Container(
-          width: 86,
-          height: 56,
+          width: countryCodeWidth,
+          height: containerHeight,
           decoration: BoxDecoration(
             color: const Color(0x11111111),
             borderRadius: BorderRadius.circular(12),
@@ -192,17 +212,18 @@ class _PhoneRowState extends State<_PhoneRow> {
               width: _isPhoneFocused ? 1.5 : 1,
             ),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: EdgeInsets.symmetric(horizontal: widget.isSmallScreen ? 8 : 12),
           alignment: Alignment.center,
           child: _CountryCodeDropdown(
             value: provider.countryCode,
             onChanged: (String? v) => provider.setCountryCode(v ?? provider.countryCode),
+            isSmallScreen: widget.isSmallScreen,
           ),
         ),
-        const SizedBox(width: 20),
+        SizedBox(width: spacing),
         Expanded(
           child: Container(
-            height: 56,
+            height: containerHeight,
             decoration: BoxDecoration(
               color: const Color(0x11111111),
               borderRadius: BorderRadius.circular(12),
@@ -220,24 +241,24 @@ class _PhoneRowState extends State<_PhoneRow> {
                   FilteringTextInputFormatter.digitsOnly,
                   LengthLimitingTextInputFormatter(10),
                 ],
-              style: const TextStyle(
-                fontSize: 16,
+              style: TextStyle(
+                fontSize: widget.isSmallScreen ? 14 : 16,
                 fontWeight: FontWeight.w500,
                 color: Colors.white,
               ),
               onChanged: provider.onPhoneChanged,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: 'Enter Mobile Number',
                 hintStyle: TextStyle(
-                  color: Color(0xFF8A8A8A),
-                  fontSize: 16,
+                  color: const Color(0xFF8A8A8A),
+                  fontSize: widget.isSmallScreen ? 14 : 16,
                   fontWeight: FontWeight.w400,
                 ),
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
                 disabledBorder: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 16),
+                contentPadding: EdgeInsets.symmetric(horizontal: widget.isSmallScreen ? 12 : 16),
               ),
             ),
           ),
@@ -248,9 +269,14 @@ class _PhoneRowState extends State<_PhoneRow> {
 }
 
 class _CountryCodeDropdown extends StatelessWidget {
-  const _CountryCodeDropdown({required this.value, required this.onChanged});
+  const _CountryCodeDropdown({
+    required this.value, 
+    required this.onChanged,
+    required this.isSmallScreen,
+  });
   final String value;
   final ValueChanged<String?> onChanged;
+  final bool isSmallScreen;
 
   static const List<Map<String, String>> _codes = <Map<String, String>>[
     {'code': '+91', 'flag': '🇮🇳'},
@@ -267,26 +293,35 @@ class _CountryCodeDropdown extends StatelessWidget {
         isExpanded: true,
         dropdownColor: const Color(0xFF1A1A1A),
         iconEnabledColor: Colors.white,
-        iconSize: 20,
-        style: const TextStyle(
+        iconSize: isSmallScreen ? 16 : 20,
+        style: TextStyle(
           color: Colors.white,
-          fontSize: 18,
+          fontSize: isSmallScreen ? 14 : 18,
           fontWeight: FontWeight.w500,
         ),
         underline: const SizedBox.shrink(),
         items: _codes
             .map((Map<String, String> item) => DropdownMenuItem<String>(
               value: item['code'],
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  // Text(
-                  //   item['flag']!,
-                  //   style: const TextStyle(fontSize: 20),
-                  // ),
-                  const SizedBox(width: 8),
-                  Text(item['code']!),
-                ],
+              child: Container(
+                constraints: BoxConstraints(
+                  maxWidth: isSmallScreen ? 50 : 60,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    Flexible(
+                      child: Text(
+                        item['code']!,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: isSmallScreen ? 14 : 16,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ))
             .toList(growable: false),
@@ -313,14 +348,20 @@ class _ContinueButtonState extends State<_ContinueButton>
   Animation<double>? _pulse;
 
   void _onContinueTap(AuthProvider provider) {
+    debugPrint('Continue button tapped');
     final String raw = provider.phoneController.text.trim();
     final String digitsOnly = raw.replaceAll(RegExp(r'\D'), '');
+    debugPrint('Phone number: $raw, digits only: $digitsOnly, length: ${digitsOnly.length}');
+    
     if (digitsOnly.length != 10) {
+      debugPrint('Invalid phone number length');
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please Enter Mobile NUmber!')),
+        const SnackBar(content: Text('Please Enter Mobile Number!')),
       );
       return;
     }
+    
+    debugPrint('Calling continueWithPhone');
     provider.continueWithPhone(context);
   }
 
@@ -368,7 +409,7 @@ class _ContinueButtonState extends State<_ContinueButton>
         onTapDown: enabled ? (_) => _animationController.forward() : null,
         onTapUp: enabled ? (_) => _animationController.reverse() : null,
         onTapCancel: enabled ? () => _animationController.reverse() : null,
-        onTap: () => _onContinueTap(provider),
+        onTap: enabled ? () => _onContinueTap(provider) : null,
         child: Transform.scale(
           scale: _scaleAnimation.value,
           child: ClipRRect(
@@ -434,16 +475,16 @@ class _ContinueButtonState extends State<_ContinueButton>
                 // Content
                 Container(
                   height: 56,
-                  constraints: const BoxConstraints(minWidth: 180, maxWidth: 240),
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  constraints: const BoxConstraints(minWidth: 160, maxWidth: 240),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
                       if (provider.isLoading)
                         const SizedBox(
-                          width: 20,
-                          height: 20,
+                          width: 18,
+                          height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
@@ -453,20 +494,20 @@ class _ContinueButtonState extends State<_ContinueButton>
                         const Text(
                           'Continue',
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize: 15,
                             fontWeight: FontWeight.w600,
                             color: Colors.white,
                           ),
                         ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 10),
                       if (_pulse != null)
                         AnimatedBuilder(
                           animation: _pulse!,
                           builder: (BuildContext context, Widget? child) {
                             final double t = _pulse!.value;
                             return Container(
-                              width: 40,
-                              height: 40,
+                              width: 36,
+                              height: 36,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 gradient: LinearGradient(
@@ -506,8 +547,8 @@ class _ContinueButtonState extends State<_ContinueButton>
                                   ),
                                   Image.asset(
                                     'assets/icons/arrowIcon.png',
-                                    width: 20,
-                                    height: 20,
+                                    width: 18,
+                                    height: 18,
                                     color: Colors.white,
                                   ),
                                 ],
@@ -517,8 +558,8 @@ class _ContinueButtonState extends State<_ContinueButton>
                         )
                       else
                         Container(
-                          width: 40,
-                          height: 40,
+                          width: 36,
+                          height: 36,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             gradient: LinearGradient(
@@ -543,8 +584,8 @@ class _ContinueButtonState extends State<_ContinueButton>
                           alignment: Alignment.center,
                           child: Image.asset(
                             'assets/icons/arrowIcon.png',
-                            width: 20,
-                            height: 20,
+                            width: 18,
+                            height: 18,
                             color: Colors.white,
                           ),
                         ),

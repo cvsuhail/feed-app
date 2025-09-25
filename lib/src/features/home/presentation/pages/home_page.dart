@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:dio/dio.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/time_utils.dart';
+import '../../data/models/feed_model.dart';
+import '../../data/services/home_api_service.dart';
+import '../widgets/enhanced_video_player.dart';
 import 'add_feed_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -14,56 +17,65 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   String _selectedFilter = 'Explore';
   late final Future<List<String>> _categoriesFuture;
-  late final Dio _dio;
+  late final HomeApiService _apiService;
+  int? _currentlyPlayingIndex;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _dio = Dio(
-      BaseOptions(
-        baseUrl: 'https://frijo.noviindus.in/api/',
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 10),
-        responseType: ResponseType.json,
-        headers: const <String, String>{
-          'Accept': 'application/json',
-        },
-      ),
-    );
-    _categoriesFuture = _fetchCategories();
+    _apiService = HomeApiService();
+    _categoriesFuture = _apiService.getCategories();
+    _setupScrollListener();
   }
 
-  Future<List<String>> _fetchCategories() async {
-    try {
-      final Response<dynamic> response = await _dio.get('category_list');
-      final dynamic decoded = response.data;
-      if (decoded is List) {
-        return decoded
-            .map((dynamic e) => _extractCategoryName(e))
-            .whereType<String>()
-            .toList();
-      }
-      if (decoded is Map<String, dynamic>) {
-        final dynamic data = decoded['data'] ?? decoded['categories'] ?? decoded['result'];
-        if (data is List) {
-          return data
-              .map((dynamic e) => _extractCategoryName(e))
-              .whereType<String>()
-              .toList();
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _setupScrollListener() {
+    _scrollController.addListener(() {
+      // Auto-pause video when scrolling away from current playing video
+      if (_currentlyPlayingIndex != null) {
+        final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
+        if (renderBox != null) {
+          final position = _scrollController.position;
+          final viewportHeight = position.viewportDimension;
+          final currentOffset = position.pixels;
+          
+          // Calculate approximate position of current playing video
+          final videoHeight = 460.0; // Approximate video height
+          final videoTop = _currentlyPlayingIndex! * videoHeight;
+          final videoBottom = videoTop + videoHeight;
+          
+          // If current playing video is not in viewport, pause it
+          if (videoBottom < currentOffset || videoTop > currentOffset + viewportHeight) {
+            setState(() {
+              _currentlyPlayingIndex = null;
+            });
+          }
         }
       }
-      return <String>[];
-    } on DioException {
-      return <String>[];
-    }
+    });
   }
 
-  String? _extractCategoryName(dynamic item) {
-    if (item is String) return item;
-    if (item is Map<String, dynamic>) {
-      return (item['name'] ?? item['title'] ?? item['category_name'] ?? item['label'])?.toString();
-    }
-    return null;
+  void _onFilterChanged(String filter) {
+    setState(() {
+      _selectedFilter = filter;
+      _currentlyPlayingIndex = null; // Reset playing video when filter changes
+    });
+  }
+
+  void _onVideoPlayPause(int index) {
+    setState(() {
+      if (_currentlyPlayingIndex == index) {
+        _currentlyPlayingIndex = null; // Pause current video
+      } else {
+        _currentlyPlayingIndex = index; // Play new video (this will auto-pause others)
+      }
+    });
   }
 
   @override
@@ -111,24 +123,26 @@ class _HomePageState extends State<HomePage> {
                   return _FilterButtons(
                     categories: const <String>['Explore', 'Trending', 'All Categories', 'Photos'],
                     selectedFilter: _selectedFilter,
-                    onFilterChanged: (String filter) {
-                      setState(() { _selectedFilter = filter; });
-                    },
+                    onFilterChanged: _onFilterChanged,
                   );
                 }
                 final List<String> items = <String>['Explore', ...categories];
                 return _FilterButtons(
                   categories: items,
                   selectedFilter: _selectedFilter,
-                  onFilterChanged: (String filter) {
-                    setState(() { _selectedFilter = filter; });
-                  },
+                  onFilterChanged: _onFilterChanged,
                 );
               },
             ),
             const SizedBox(height: 20),
             Expanded(
-              child: _FeedList(),
+              child: _FeedList(
+                selectedFilter: _selectedFilter,
+                apiService: _apiService,
+                currentlyPlayingIndex: _currentlyPlayingIndex,
+                onVideoPlayPause: _onVideoPlayPause,
+                scrollController: _scrollController,
+              ),
             ),
           ],
         ),
@@ -140,21 +154,7 @@ class _HomePageState extends State<HomePage> {
 class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 0.9, end: 1.0),
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeOutBack,
-      builder: (BuildContext context, double t, Widget? child) {
-        return Opacity(
-          opacity: (t - 0.88).clamp(0.0, 1.0),
-          child: Transform.scale(
-            scale: t,
-            alignment: Alignment.topLeft,
-            child: child,
-          ),
-        );
-      },
-      child: Padding(
+    return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
         child: Row(
           children: [
@@ -197,8 +197,7 @@ class _Header extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 }
 
@@ -371,59 +370,162 @@ class _FilterButton extends StatelessWidget {
   }
 }
 
-class _FeedList extends StatelessWidget {
+class _FeedList extends StatefulWidget {
+  const _FeedList({
+    required this.selectedFilter,
+    required this.apiService,
+    required this.currentlyPlayingIndex,
+    required this.onVideoPlayPause,
+    required this.scrollController,
+  });
+
+  final String selectedFilter;
+  final HomeApiService apiService;
+  final int? currentlyPlayingIndex;
+  final ValueChanged<int> onVideoPlayPause;
+  final ScrollController scrollController;
+
+  @override
+  State<_FeedList> createState() => _FeedListState();
+}
+
+class _FeedListState extends State<_FeedList> {
+  List<FeedModel> _feeds = [];
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFeeds();
+  }
+
+  @override
+  void didUpdateWidget(_FeedList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedFilter != widget.selectedFilter) {
+      _loadFeeds();
+    }
+  }
+
+  Future<void> _loadFeeds() async {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final feeds = await widget.apiService.getFeeds(category: widget.selectedFilter);
+      if (mounted) {
+        setState(() {
+          _feeds = feeds;
+          _isLoading = false;
+          _error = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 0.96, end: 1.0),
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeOut,
-      builder: (BuildContext context, double t, Widget? child) {
-        return Transform.scale(
-          scale: t,
-          alignment: Alignment.topCenter,
-          child: child,
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          color: Colors.white,
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              color: Colors.white54,
+              size: 64,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Failed to load feeds',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.7),
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _error!,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.5),
+                fontSize: 12,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_feeds.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.video_library_outlined,
+              color: Colors.white54,
+              size: 64,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No feeds available',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.7),
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      controller: widget.scrollController,
+      padding: const EdgeInsets.symmetric(horizontal: 0),
+      itemCount: _feeds.length,
+      itemBuilder: (context, index) {
+        final feed = _feeds[index];
+        return _FeedCard(
+          feed: feed,
+          isPlaying: widget.currentlyPlayingIndex == index,
+          onPlayPause: () => widget.onVideoPlayPause(index),
         );
       },
-      child: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 0),
-        children: const [
-          _FeedCard(
-            userName: 'Michel Jhon',
-            timeAgo: '5 days ago',
-            description: 'Lorem ipsum dolor sit amet consectetur. Leo ac lorem faucli bus facilisis tellus. At vitae dis commodo nunc sollicitudin elementum suspendisse... See More',
-            hasActionButton: false,
-          ),
-          _FeedCard(
-            userName: 'Blessy',
-            timeAgo: '5 days ago',
-            description: 'Lorem ipsum dolor sit amet consectetur. Leo ac lorem faucli bus facilisis tellus. At vitae dis commodo nunc sollicitudin elementum suspendisse... See More',
-            hasActionButton: false,
-          ),
-          _FeedCard(
-            userName: 'Blessy',
-            timeAgo: '5 days ago',
-            description: 'Lorem ipsum dolor sit amet consectetur. Leo ac lorem faucli bus facilisis tellus. At vitae dis commodo nunc sollicitudin elementum suspendisse... See More',
-            hasActionButton: false,
-          ),
-        ],
-      ),
     );
   }
 }
 
 class _FeedCard extends StatelessWidget {
   const _FeedCard({
-    required this.userName,
-    required this.timeAgo,
-    required this.description,
-    required this.hasActionButton,
+    required this.feed,
+    required this.isPlaying,
+    required this.onPlayPause,
   });
 
-  final String userName;
-  final String timeAgo;
-  final String description;
-  final bool hasActionButton;
+  final FeedModel feed;
+  final bool isPlaying;
+  final VoidCallback onPlayPause;
 
   @override
   Widget build(BuildContext context) {
@@ -447,10 +549,23 @@ class _FeedCard extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                   child: ClipOval(
-                    child: Image.asset(
-                      'assets/images/avatar.png',
-                      fit: BoxFit.cover,
-                    ),
+                    child: feed.userDetails.avatar.isNotEmpty && !feed.userDetails.avatar.startsWith('assets/')
+                        ? Image.network(
+                            feed.userDetails.avatar,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Image.asset(
+                                'assets/images/avatar.png',
+                                fit: BoxFit.cover,
+                              );
+                            },
+                          )
+                        : Image.asset(
+                            feed.userDetails.avatar.isNotEmpty && feed.userDetails.avatar.startsWith('assets/')
+                                ? feed.userDetails.avatar
+                                : 'assets/images/avatar.png',
+                            fit: BoxFit.cover,
+                          ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -459,7 +574,9 @@ class _FeedCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        userName,
+                        feed.userDetails.name.isNotEmpty 
+                            ? feed.userDetails.name 
+                            : feed.userDetails.username,
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -468,7 +585,7 @@ class _FeedCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        timeAgo,
+                        TimeUtils.formatTimeAgo(feed.createdAt),
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w400,
@@ -481,44 +598,12 @@ class _FeedCard extends StatelessWidget {
               ],
             ),
           ),
-          // Video thumbnail
-          Container(
-            child: Stack(
-              children: [
-                Container(
-                  width: double.infinity,
-                  height: 460,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2C2C2C),
-                  ),
-                  child: Center(
-                    child: SizedBox(
-                      width: 60,
-                      height: 60,
-                      child: Image.asset('assets/icons/playIcon.png'),
-                    ),
-                  ),
-                ),
-                if (hasActionButton)
-                  Positioned(
-                    bottom: 12,
-                    right: 12,
-                    child: Container(
-                      width: 48,
-                      height: 48,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: AppTheme.primaryRed,
-                      ),
-                      child: const Icon(
-                        Icons.add,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+          // Video player
+          EnhancedVideoPlayer(
+            videoUrl: feed.video,
+            thumbnailUrl: feed.thumbnail,
+            isPlaying: isPlaying,
+            onPlayPause: onPlayPause,
           ),
           const SizedBox(height: 12),
           // Description
@@ -528,20 +613,20 @@ class _FeedCard extends StatelessWidget {
               text: TextSpan(
                 children: [
                   TextSpan(
-                    text: description.contains('See More') 
-                        ? description.replaceAll('... See More', '...')
-                        : description,
-                    style:  TextStyle(
+                    text: feed.description.length > 150 
+                        ? '${feed.description.substring(0, 150)}...'
+                        : feed.description,
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w400,
                       color: Colors.white.withOpacity(0.6),
                       height: 1.4,
                     ),
                   ),
-                  if (description.contains('See More'))
-                    TextSpan(
+                  if (feed.description.length > 150)
+                    const TextSpan(
                       text: ' See More',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: Colors.white,
@@ -552,6 +637,77 @@ class _FeedCard extends StatelessWidget {
               ),
             ),
           ),
+          // Action buttons (likes, comments)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Row(
+              children: [
+                _ActionButton(
+                  icon: Icons.favorite_border,
+                  count: feed.likes,
+                  onTap: () {
+                    // Handle like action
+                  },
+                ),
+                const SizedBox(width: 24),
+                _ActionButton(
+                  icon: Icons.chat_bubble_outline,
+                  count: feed.comments,
+                  onTap: () {
+                    // Handle comment action
+                  },
+                ),
+                const SizedBox(width: 24),
+                _ActionButton(
+                  icon: Icons.share_outlined,
+                  count: 0,
+                  onTap: () {
+                    // Handle share action
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.icon,
+    required this.count,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            color: Colors.white.withOpacity(0.7),
+            size: 20,
+          ),
+          if (count > 0) ...[
+            const SizedBox(width: 4),
+            Text(
+              count.toString(),
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.7),
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
         ],
       ),
     );
