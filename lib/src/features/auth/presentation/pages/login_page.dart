@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
@@ -215,6 +216,10 @@ class _PhoneRowState extends State<_PhoneRow> {
               controller: provider.phoneController,
               focusNode: _phoneFocusNode,
               keyboardType: TextInputType.phone,
+                inputFormatters: <TextInputFormatter>[
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(10),
+                ],
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w500,

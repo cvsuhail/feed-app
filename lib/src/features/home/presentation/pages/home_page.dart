@@ -140,48 +140,63 @@ class _HomePageState extends State<HomePage> {
 class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Hello Maria',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Welcome back to Section',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: Colors.white.withOpacity(0.7),
-                  ),
-                ),
-              ],
-            ),
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0.9, end: 1.0),
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeOutBack,
+      builder: (BuildContext context, double t, Widget? child) {
+        return Opacity(
+          opacity: (t - 0.88).clamp(0.0, 1.0),
+          child: Transform.scale(
+            scale: t,
+            alignment: Alignment.topLeft,
+            child: child,
           ),
-          Container(
-            width: 48,
-            height: 48,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-            ),
-            child: ClipOval(
-              child: Image.asset(
-                'assets/images/avatar.png',
-                fit: BoxFit.cover,
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Hello Maria',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Welcome back to Section',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.white.withOpacity(0.7),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
+            Container(
+              width: 48,
+              height: 48,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+              ),
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/images/avatar.png',
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -199,38 +214,49 @@ class _FilterButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: categories.asMap().entries.map((entry) {
-            final int index = entry.key;
-            final String label = entry.value;
-            final bool isFirst = index == 0;
-            
-            return Row(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(left: 4),
-                  child: _FilterButton(
-                    label: label,
-                    isSelected: selectedFilter == label,
-                    icon: isFirst && label == 'Explore' ? 'assets/icons/exploreIcon.png' : null,
-                    onTap: () => onFilterChanged(label),
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 10, end: 0),
+      duration: const Duration(milliseconds: 550),
+      curve: Curves.easeOut,
+      builder: (BuildContext context, double dy, Widget? child) {
+        return Transform.translate(
+          offset: Offset(0, dy),
+          child: Opacity(opacity: (1 - (dy / 10)).clamp(0.0, 1.0), child: child),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: categories.asMap().entries.map((entry) {
+              final int index = entry.key;
+              final String label = entry.value;
+              final bool isFirst = index == 0;
+              
+              return Row(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: _FilterButton(
+                      label: label,
+                      isSelected: selectedFilter == label,
+                      icon: isFirst && label == 'Explore' ? 'assets/icons/exploreIcon.png' : null,
+                      onTap: () => onFilterChanged(label),
+                    ),
                   ),
-                ),
-                if (isFirst && categories.length > 1) ...[
-                  Container(
-                    height: 24,
-                    width: 1,
-                    color: Colors.white.withOpacity(0.2),
-                    margin: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
+                  if (isFirst && categories.length > 1) ...[
+                    Container(
+                      height: 24,
+                      width: 1,
+                      color: Colors.white.withOpacity(0.2),
+                      margin: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                  ],
                 ],
-              ],
-            );
-          }).toList(),
+              );
+            }).toList(),
+          ),
         ),
       ),
     );
@@ -348,28 +374,40 @@ class _FilterButton extends StatelessWidget {
 class _FeedList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 0),
-      children: const [
-        _FeedCard(
-          userName: 'Michel Jhon',
-          timeAgo: '5 days ago',
-          description: 'Lorem ipsum dolor sit amet consectetur. Leo ac lorem faucli bus facilisis tellus. At vitae dis commodo nunc sollicitudin elementum suspendisse... See More',
-          hasActionButton: false,
-        ),
-        _FeedCard(
-          userName: 'Blessy',
-          timeAgo: '5 days ago',
-          description: 'Lorem ipsum dolor sit amet consectetur. Leo ac lorem faucli bus facilisis tellus. At vitae dis commodo nunc sollicitudin elementum suspendisse... See More',
-          hasActionButton: false,
-        ),
-        _FeedCard(
-          userName: 'Blessy',
-          timeAgo: '5 days ago',
-          description: 'Lorem ipsum dolor sit amet consectetur. Leo ac lorem faucli bus facilisis tellus. At vitae dis commodo nunc sollicitudin elementum suspendisse... See More',
-          hasActionButton: false,
-        ),
-      ],
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0.96, end: 1.0),
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeOut,
+      builder: (BuildContext context, double t, Widget? child) {
+        return Transform.scale(
+          scale: t,
+          alignment: Alignment.topCenter,
+          child: child,
+        );
+      },
+      child: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 0),
+        children: const [
+          _FeedCard(
+            userName: 'Michel Jhon',
+            timeAgo: '5 days ago',
+            description: 'Lorem ipsum dolor sit amet consectetur. Leo ac lorem faucli bus facilisis tellus. At vitae dis commodo nunc sollicitudin elementum suspendisse... See More',
+            hasActionButton: false,
+          ),
+          _FeedCard(
+            userName: 'Blessy',
+            timeAgo: '5 days ago',
+            description: 'Lorem ipsum dolor sit amet consectetur. Leo ac lorem faucli bus facilisis tellus. At vitae dis commodo nunc sollicitudin elementum suspendisse... See More',
+            hasActionButton: false,
+          ),
+          _FeedCard(
+            userName: 'Blessy',
+            timeAgo: '5 days ago',
+            description: 'Lorem ipsum dolor sit amet consectetur. Leo ac lorem faucli bus facilisis tellus. At vitae dis commodo nunc sollicitudin elementum suspendisse... See More',
+            hasActionButton: false,
+          ),
+        ],
+      ),
     );
   }
 }
