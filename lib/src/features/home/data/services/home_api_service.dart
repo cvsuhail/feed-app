@@ -18,7 +18,6 @@ class HomeApiService {
       validateStatus: (int? status) => true,
       headers: const <String, String>{
         'Accept': 'application/json',
-        'Content-Type': 'application/json',
       },
     ),
   );
@@ -257,7 +256,7 @@ class HomeApiService {
       debugPrint('HOME_API_UPLOAD_FEED_CATEGORY_IDS: $categoryIds');
 
       // Create FormData with proper multipart fields
-      final FormData formData = FormData.fromMap(<String, dynamic>{
+      final Map<String, dynamic> formDataMap = <String, dynamic>{
         'video': await MultipartFile.fromFile(
           videoFile.path, 
           filename: videoFile.uri.pathSegments.isNotEmpty ? videoFile.uri.pathSegments.last : 'video.mp4'
@@ -267,10 +266,18 @@ class HomeApiService {
           filename: imageFile.uri.pathSegments.isNotEmpty ? imageFile.uri.pathSegments.last : 'image.jpg'
         ),
         'desc': description,
-        'category': categoryIds, // This should be sent as [23,24,25] format
-      });
+      };
+      
+      // Add category IDs - try simple format first
+      if (categoryIds.isNotEmpty) {
+        formDataMap['category'] = categoryIds.first; // Send first category ID as simple value
+      }
+      
+      final FormData formData = FormData.fromMap(formDataMap);
 
       debugPrint('HOME_API_UPLOAD_FEED_FORM_DATA: video=${videoFile.path}, image=${imageFile.path}, desc=$description, category=$categoryIds');
+      debugPrint('HOME_API_UPLOAD_FEED_VIDEO_EXISTS: ${await videoFile.exists()}');
+      debugPrint('HOME_API_UPLOAD_FEED_IMAGE_EXISTS: ${await imageFile.exists()}');
 
       final Response<dynamic> response = await _dio.post(
         'my_feed',
@@ -280,6 +287,8 @@ class HomeApiService {
           headers: {
             'Accept': 'application/json',
           },
+          sendTimeout: const Duration(minutes: 5), // Increase timeout for file uploads
+          receiveTimeout: const Duration(minutes: 5),
         ),
       );
 
@@ -288,13 +297,17 @@ class HomeApiService {
       }
 
       debugPrint('HOME_API_UPLOAD_FEED_SUCCESS: ${response.statusCode}');
+      debugPrint('HOME_API_UPLOAD_FEED_RESPONSE: ${response.data}');
     } on DioException catch (e) {
+      debugPrint('HOME_API_UPLOAD_FEED_DIO_ERROR: ${e.type} - ${e.message}');
       if (e.response != null) {
+        debugPrint('HOME_API_UPLOAD_FEED_ERROR_RESPONSE: ${e.response?.statusCode} - ${e.response?.data}');
         throw Exception('API Error: ${e.response?.statusCode} - ${e.response?.data}');
       } else {
         throw Exception('Network Error: ${e.message}');
       }
     } catch (e) {
+      debugPrint('HOME_API_UPLOAD_FEED_GENERAL_ERROR: $e');
       rethrow;
     }
   }
