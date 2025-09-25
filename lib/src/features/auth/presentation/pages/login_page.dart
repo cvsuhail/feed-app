@@ -86,7 +86,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     const Spacer(),
                     Center(
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 280),
+                        constraints: const BoxConstraints(maxWidth: 240),
                         child: const _ContinueButton(),
                       ),
                     ),
@@ -112,7 +112,7 @@ class _Header extends StatelessWidget {
       curve: Curves.easeOutBack,
       builder: (BuildContext context, double value, Widget? child) {
         return Opacity(
-          opacity: value,
+          opacity: value.clamp(0.0, 1.0),
           child: Transform.scale(
             scale: value,
             alignment: Alignment.centerLeft,
@@ -299,13 +299,25 @@ class _ContinueButton extends StatefulWidget {
 }
 
 class _ContinueButtonState extends State<_ContinueButton> 
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
   // Removed shimmer usage in simplified UI
-  late AnimationController _glowController;
-  late Animation<Alignment> _highlightAlignment;
-  late Animation<double> _pulse;
+  AnimationController? _glowController;
+  Animation<Alignment>? _highlightAlignment;
+  Animation<double>? _pulse;
+
+  void _onContinueTap(AuthProvider provider) {
+    final String raw = provider.phoneController.text.trim();
+    final String digitsOnly = raw.replaceAll(RegExp(r'\D'), '');
+    if (digitsOnly.length != 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please Enter Mobile NUmber!')),
+      );
+      return;
+    }
+    provider.continueWithPhone(context);
+  }
 
   @override
   void initState() {
@@ -327,17 +339,17 @@ class _ContinueButtonState extends State<_ContinueButton>
     _highlightAlignment = AlignmentTween(
       begin: const Alignment(-1.1, -0.6),
       end: const Alignment(1.1, 0.6),
-    ).animate(CurvedAnimation(parent: _glowController, curve: Curves.easeInOut));
+    ).animate(CurvedAnimation(parent: _glowController!, curve: Curves.easeInOut));
 
     _pulse = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
+      CurvedAnimation(parent: _glowController!, curve: Curves.easeInOut),
     );
   }
 
   @override
   void dispose() {
     _animationController.dispose();
-    _glowController.dispose();
+    _glowController?.dispose();
     super.dispose();
   }
 
@@ -351,7 +363,7 @@ class _ContinueButtonState extends State<_ContinueButton>
         onTapDown: enabled ? (_) => _animationController.forward() : null,
         onTapUp: enabled ? (_) => _animationController.reverse() : null,
         onTapCancel: enabled ? () => _animationController.reverse() : null,
-        onTap: enabled ? provider.continueWithPhone : null,
+        onTap: () => _onContinueTap(provider),
         child: Transform.scale(
           scale: _scaleAnimation.value,
           child: ClipRRect(
@@ -366,7 +378,7 @@ class _ContinueButtonState extends State<_ContinueButton>
                 // Glass base
                 Container(
                   height: 56,
-                  constraints: const BoxConstraints(minWidth: 220, maxWidth: 280),
+                  constraints: const BoxConstraints(minWidth: 90, maxWidth: 150),
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
@@ -392,31 +404,32 @@ class _ContinueButtonState extends State<_ContinueButton>
                   ),
                 ),
                 // Moving liquid highlight
-                AnimatedBuilder(
-                  animation: _glowController,
-                  builder: (BuildContext context, Widget? child) {
-                    return Align(
-                      alignment: _highlightAlignment.value,
-                      child: Container(
-                        width: 140,
-                        height: 140,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(
-                            colors: <Color>[
-                              Color(0x26FFFFFF),
-                              Color(0x00000000),
-                            ],
+                if (_glowController != null)
+                  AnimatedBuilder(
+                    animation: _glowController!,
+                    builder: (BuildContext context, Widget? child) {
+                      return Align(
+                        alignment: _highlightAlignment!.value,
+                        child: Container(
+                          width: 140,
+                          height: 140,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: <Color>[
+                                Color(0x26FFFFFF),
+                                Color(0x00000000),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    );
-                  },
-                ),
+                      );
+                    },
+                  ),
                 // Content
                 Container(
                   height: 56,
-                  constraints: const BoxConstraints(minWidth: 220, maxWidth: 280),
+                  constraints: const BoxConstraints(minWidth: 180, maxWidth: 240),
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -441,61 +454,95 @@ class _ContinueButtonState extends State<_ContinueButton>
                           ),
                         ),
                       const SizedBox(width: 12),
-                      AnimatedBuilder(
-                        animation: _pulse,
-                        builder: (BuildContext context, Widget? child) {
-                          final double t = _pulse.value;
-                          return Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: <Color>[
-                                  enabled ? AppTheme.primaryRed : const Color(0xFF2C2C2C),
-                                  enabled ? AppTheme.primaryRed.withOpacity(0.85) : const Color(0xFF2C2C2C),
-                                ],
+                      if (_pulse != null)
+                        AnimatedBuilder(
+                          animation: _pulse!,
+                          builder: (BuildContext context, Widget? child) {
+                            final double t = _pulse!.value;
+                            return Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: <Color>[
+                                    enabled ? AppTheme.primaryRed : const Color(0xFF2C2C2C),
+                                    enabled ? AppTheme.primaryRed.withOpacity(0.85) : const Color(0xFF2C2C2C),
+                                  ],
+                                ),
+                                boxShadow: enabled
+                                    ? <BoxShadow>[
+                                        BoxShadow(
+                                          color: AppTheme.primaryRed.withOpacity(0.25 + 0.25 * t),
+                                          blurRadius: 12 + 6 * t,
+                                          offset: const Offset(0, 6),
+                                        ),
+                                      ]
+                                    : null,
+                                border: Border.all(color: const Color(0x33FFFFFF)),
                               ),
-                              boxShadow: enabled
-                                  ? <BoxShadow>[
-                                      BoxShadow(
-                                        color: AppTheme.primaryRed.withOpacity(0.25 + 0.25 * t),
-                                        blurRadius: 12 + 6 * t,
-                                        offset: const Offset(0, 6),
-                                      ),
-                                    ]
-                                  : null,
-                              border: Border.all(color: const Color(0x33FFFFFF)),
-                            ),
-                            alignment: Alignment.center,
-                            child: Stack(
                               alignment: Alignment.center,
-                              children: <Widget>[
-                                Positioned(
-                                  top: 6,
-                                  left: 8,
-                                  child: Container(
-                                    width: 10,
-                                    height: 10,
-                                    decoration: const BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: Color(0x55FFFFFF),
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: <Widget>[
+                                  Positioned(
+                                    top: 6,
+                                    left: 8,
+                                    child: Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: const BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Color(0x55FFFFFF),
+                                      ),
                                     ),
                                   ),
-                                ),
-                                Image.asset(
-                                  'assets/icons/arrowIcon.png',
-                                  width: 20,
-                                  height: 20,
-                                  color: Colors.white,
-                                ),
+                                  Image.asset(
+                                    'assets/icons/arrowIcon.png',
+                                    width: 20,
+                                    height: 20,
+                                    color: Colors.white,
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        )
+                      else
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: <Color>[
+                                enabled ? AppTheme.primaryRed : const Color(0xFF2C2C2C),
+                                enabled ? AppTheme.primaryRed.withOpacity(0.85) : const Color(0xFF2C2C2C),
                               ],
                             ),
-                          );
-                        },
-                      ),
+                            boxShadow: enabled
+                                ? const <BoxShadow>[
+                                    BoxShadow(
+                                      color: Color(0x33000000),
+                                      blurRadius: 12,
+                                      offset: Offset(0, 6),
+                                    ),
+                                  ]
+                                : null,
+                            border: Border.all(color: const Color(0x33FFFFFF)),
+                          ),
+                          alignment: Alignment.center,
+                          child: Image.asset(
+                            'assets/icons/arrowIcon.png',
+                            width: 20,
+                            height: 20,
+                            color: Colors.white,
+                          ),
+                        ),
                     ],
                   ),
                 ),
