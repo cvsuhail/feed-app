@@ -467,7 +467,9 @@ class _UploadThumbCard extends StatelessWidget {
               border: hasError ? Border.all(color: Colors.red, width: 2) : null,
             ),
             padding: const EdgeInsets.symmetric(vertical: 28),
-            child: Column(
+            child:             Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: <Widget>[
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -479,15 +481,12 @@ class _UploadThumbCard extends StatelessWidget {
                       color: hasError ? Colors.red : Colors.white,
                     ),
                     const SizedBox(width: 14),
-                    Expanded(
-                      child: Text(
-                        fileName ?? 'Add a Thumbnail',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: hasError ? Colors.red : Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
+                    Text(
+                      fileName ?? 'Add a Thumbnail',
+                      style: TextStyle(
+                        color: hasError ? Colors.red : Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
@@ -496,6 +495,7 @@ class _UploadThumbCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     fileSize!,
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       color: hasError ? Colors.red.withOpacity(0.7) : Colors.white.withOpacity(0.7),
                       fontSize: 12,
@@ -507,6 +507,7 @@ class _UploadThumbCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   const Text(
                     'Thumbnail selection is required',
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.red,
                       fontSize: 12,
