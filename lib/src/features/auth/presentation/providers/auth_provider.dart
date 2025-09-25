@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../home/presentation/pages/home_page.dart';
+
 class AuthProvider extends ChangeNotifier {
   AuthProvider();
 
@@ -23,13 +25,22 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> continueWithPhone() async {
+  Future<void> continueWithPhone(BuildContext context) async {
     if (!_isValid || _isLoading) return;
     _isLoading = true;
     notifyListeners();
     await Future<void>.delayed(const Duration(milliseconds: 900));
     _isLoading = false;
     notifyListeners();
+    
+    // Navigate to home page
+    if (context.mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (context) => const HomePage(),
+        ),
+      );
+    }
   }
 
   @override
