@@ -31,12 +31,14 @@ class AuthProvider extends ChangeNotifier {
   final Dio _dio = Dio(
     BaseOptions(
       baseUrl: _baseUrl,
-      connectTimeout: const Duration(seconds: 20),
-      receiveTimeout: const Duration(seconds: 20),
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
+      sendTimeout: const Duration(seconds: 30),
       responseType: ResponseType.json,
       validateStatus: (int? status) => true,
       headers: const <String, String>{
         'Accept': 'application/json',
+        'Content-Type': 'application/json',
       },
     ),
   );
@@ -58,11 +60,16 @@ class AuthProvider extends ChangeNotifier {
   void onPhoneChanged(String value) {
     final String digitsOnly = value.replaceAll(RegExp(r'[^0-9]'), '');
     _isValid = digitsOnly.length == 10;
+    debugPrint('Phone changed: "$value" -> digits: "$digitsOnly" -> valid: $_isValid');
     notifyListeners();
   }
 
   Future<void> continueWithPhone(BuildContext context) async {
-    if (!_isValid || _isLoading) return;
+    debugPrint('continueWithPhone called - isValid: $_isValid, isLoading: $_isLoading');
+    if (!_isValid || _isLoading) {
+      debugPrint('Early return: isValid=$_isValid, isLoading=$_isLoading');
+      return;
+    }
     _isLoading = true;
     notifyListeners();
     try {
@@ -77,6 +84,7 @@ class AuthProvider extends ChangeNotifier {
         data: jsonBody,
         options: Options(contentType: Headers.jsonContentType),
       );
+      debugPrint('LOGIN_STATUS_CHECK: statusCode=${response.statusCode}, isSuccess=${response.statusCode != null && response.statusCode! >= 200 && response.statusCode! < 300}');
       if (response.statusCode == null || response.statusCode! < 200 || response.statusCode! >= 300) {
         String message = 'Request failed (${response.statusCode}). Please try again.';
         final dynamic body = response.data;
@@ -104,13 +112,16 @@ class AuthProvider extends ChangeNotifier {
         return;
       }
       final dynamic data = response.data;
+      debugPrint('LOGIN_DATA: $data');
       String? accessToken;
       if (data is Map<String, dynamic>) {
         final dynamic topToken = data['token'];
+        debugPrint('LOGIN_TOKEN_EXTRACTION: topToken=$topToken');
         if (topToken is String) {
           accessToken = topToken;
         } else if (topToken is Map<String, dynamic>) {
           accessToken = topToken['access'] as String?;
+          debugPrint('LOGIN_ACCESS_TOKEN: $accessToken');
         }
         accessToken ??= data['access'] as String?;
         if (accessToken == null && data['data'] is Map<String, dynamic>) {
@@ -125,9 +136,12 @@ class AuthProvider extends ChangeNotifier {
           }
         }
       }
+      debugPrint('LOGIN_FINAL_TOKEN: $accessToken');
       final bool statusOk = (data is Map<String, dynamic>) && (data['status'] == true);
       final bool hasPrivilege = (data is Map<String, dynamic>) && (data['privilage'] == true);
       final String? errorMessage = (data is Map<String, dynamic>) ? data['message'] as String? : null;
+      
+      debugPrint('LOGIN_VALIDATION: statusOk=$statusOk, hasPrivilege=$hasPrivilege, errorMessage=$errorMessage');
       
       // Check if login failed due to privilege issues
       if (statusOk && !hasPrivilege && errorMessage != null) {
@@ -165,6 +179,7 @@ class AuthProvider extends ChangeNotifier {
       try {
         final SharedPreferences prefs = await SharedPreferences.getInstance();
         await prefs.setString(_tokenKey, accessToken);
+        debugPrint('LOGIN_TOKEN_STORED_SUCCESSFULLY: $accessToken');
       } on PlatformException catch (e) {
         debugPrint('LOGIN_PREFERENCES_ERROR: $e');
         // Soft-fail: continue navigation even if preferences are unavailable
@@ -172,6 +187,7 @@ class AuthProvider extends ChangeNotifier {
         debugPrint('LOGIN_PREFERENCES_UNKNOWN_ERROR: $e');
       }
 
+      debugPrint('LOGIN_NAVIGATING_TO_HOME');
       if (context.mounted) {
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
@@ -193,6 +209,9 @@ class AuthProvider extends ChangeNotifier {
       String message = 'Network error, please try again';
       final int? code = e.response?.statusCode;
       final dynamic body = e.response?.data;
+      
+      debugPrint('DioException type: ${e.type}, message: ${e.message}');
+      
       if (body is Map<String, dynamic>) {
         final dynamic direct = body['message'] ?? body['detail'] ?? body['error'] ?? body['errors'];
         if (direct is String && direct.trim().isNotEmpty) {
@@ -201,26 +220,35 @@ class AuthProvider extends ChangeNotifier {
           message = body.toString();
         }
       } else if (e.type == DioExceptionType.connectionTimeout) {
-        message = 'Connection timed out. Please try again.';
+        message = 'Connection timed out. The server may be slow. Please try again.';
       } else if (e.type == DioExceptionType.receiveTimeout) {
         message = 'Server took too long to respond. Please try again.';
+      } else if (e.type == DioExceptionType.sendTimeout) {
+        message = 'Request timed out while sending data. Please try again.';
       } else if (e.type == DioExceptionType.connectionError) {
         message = 'Cannot reach server. Check your internet connection.';
       } else if (e.type == DioExceptionType.badCertificate) {
         message = 'Secure connection failed (certificate error).';
+      } else if (e.type == DioExceptionType.cancel) {
+        message = 'Request was cancelled. Please try again.';
       } else if (e.message != null && e.message!.isNotEmpty) {
         message = e.message!;
       }
+      
       if (code == 400 || code == 401) {
         // Prefer a friendly, explicit invalid credentials message
         message = message == 'Network error, please try again'
             ? 'Invalid credentials. Please check your number and try again.'
             : message;
       }
+      
+      debugPrint('Showing error message: $message');
+      
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(message),
+            duration: const Duration(seconds: 4),
             action: SnackBarAction(
               label: 'COPY',
               onPressed: () => Clipboard.setData(ClipboardData(text: message)),
@@ -230,6 +258,14 @@ class AuthProvider extends ChangeNotifier {
       }
     } catch (e, s) {
       debugPrint('LOGIN_UNEXPECTED_ERROR: $e\n$s');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('An unexpected error occurred. Please try again.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
     } finally {
       _isLoading = false;
       notifyListeners();
