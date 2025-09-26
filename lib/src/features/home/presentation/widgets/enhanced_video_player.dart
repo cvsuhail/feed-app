@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import '../services/thumbnail_preloader.dart';
 
 class EnhancedVideoPlayer extends StatefulWidget {
   const EnhancedVideoPlayer({
@@ -10,6 +11,7 @@ class EnhancedVideoPlayer extends StatefulWidget {
     required this.isPlaying,
     required this.onPlayPause,
     this.aspectRatio,
+    this.onControllerReady,
   });
 
   final String videoUrl;
@@ -17,6 +19,7 @@ class EnhancedVideoPlayer extends StatefulWidget {
   final bool isPlaying;
   final VoidCallback onPlayPause;
   final double? aspectRatio;
+  final Function(VideoPlayerController)? onControllerReady;
 
   @override
   State<EnhancedVideoPlayer> createState() => _EnhancedVideoPlayerState();
@@ -28,8 +31,10 @@ class _EnhancedVideoPlayerState extends State<EnhancedVideoPlayer> {
   bool _hasError = false;
   bool _showControls = false;
   bool _isBuffering = false;
+  bool _isThumbnailLoaded = false;
   Timer? _controlsTimer;
   double _currentAspectRatio = 16 / 9; // Default aspect ratio
+  bool _isDisposed = false;
 
   @override
   void initState() {
@@ -49,9 +54,12 @@ class _EnhancedVideoPlayerState extends State<EnhancedVideoPlayer> {
   }
 
   void _initializeVideo() async {
-    if (!mounted) return;
+    if (!mounted || _isDisposed) return;
 
     try {
+      // Dispose existing controller if any
+      _disposeController();
+      
       _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
       
       // Listen to controller events
@@ -59,18 +67,23 @@ class _EnhancedVideoPlayerState extends State<EnhancedVideoPlayer> {
       
       await _controller!.initialize();
       
-      if (mounted) {
+      if (mounted && !_isDisposed) {
         setState(() {
           _isInitialized = true;
           _currentAspectRatio = _controller!.value.aspectRatio;
         });
         
+        // Notify parent about controller readiness
+        widget.onControllerReady?.call(_controller!);
+        
+        // Only auto-play if this video should be playing
         if (widget.isPlaying) {
           _controller!.play();
         }
       }
     } catch (e) {
-      if (mounted) {
+      debugPrint('Video initialization error: $e');
+      if (mounted && !_isDisposed) {
         setState(() {
           _hasError = true;
         });
@@ -79,7 +92,7 @@ class _EnhancedVideoPlayerState extends State<EnhancedVideoPlayer> {
   }
 
   void _videoListener() {
-    if (!mounted) return;
+    if (!mounted || _isDisposed) return;
     
     final controller = _controller;
     if (controller == null) return;
@@ -90,7 +103,7 @@ class _EnhancedVideoPlayerState extends State<EnhancedVideoPlayer> {
   }
 
   void _handlePlayPause() {
-    if (_controller != null && _isInitialized && mounted) {
+    if (_controller != null && _isInitialized && mounted && !_isDisposed) {
       if (widget.isPlaying) {
         _controller!.play();
       } else {
@@ -137,6 +150,7 @@ class _EnhancedVideoPlayerState extends State<EnhancedVideoPlayer> {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _disposeController();
     super.dispose();
   }
@@ -190,24 +204,96 @@ class _EnhancedVideoPlayerState extends State<EnhancedVideoPlayer> {
       child: Container(
         decoration: BoxDecoration(
           color: const Color(0xFF2C2C2C),
-          image: widget.thumbnailUrl.isNotEmpty
-              ? DecorationImage(
-                  image: NetworkImage(widget.thumbnailUrl),
-                  fit: BoxFit.cover,
-                )
-              : null,
         ),
-        child: widget.thumbnailUrl.isEmpty
-            ? const Center(
+        child: Stack(
+          children: [
+            // Thumbnail image with smooth loading and preloading support
+            if (widget.thumbnailUrl.isNotEmpty)
+              AnimatedOpacity(
+                opacity: _isThumbnailLoaded ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 300),
+                child: _buildThumbnailImage(),
+              ),
+            
+            // Fallback icon when no thumbnail or error
+            if (widget.thumbnailUrl.isEmpty || !_isThumbnailLoaded)
+              const Center(
                 child: Icon(
                   Icons.video_library,
                   color: Colors.white54,
                   size: 60,
                 ),
-              )
-            : null,
+              ),
+          ],
+        ),
       ),
     );
+  }
+
+  Widget _buildThumbnailImage() {
+    final preloader = ThumbnailPreloader();
+    final preloadedImage = preloader.getPreloadedImage(widget.thumbnailUrl);
+    
+    if (preloadedImage != null) {
+      // Use preloaded image for instant display
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_isDisposed) {
+          setState(() {
+            _isThumbnailLoaded = true;
+          });
+        }
+      });
+      
+      return Image(
+        image: preloadedImage,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+      );
+    } else {
+      // Fallback to network image with loading states
+      return Image.network(
+        widget.thumbnailUrl,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) {
+            // Image loaded successfully
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && !_isDisposed) {
+                setState(() {
+                  _isThumbnailLoaded = true;
+                });
+              }
+            });
+            return child;
+          }
+          // Show loading indicator while thumbnail loads
+          return Container(
+            color: const Color(0xFF2C2C2C),
+            child: const Center(
+              child: CircularProgressIndicator(
+                color: Colors.white54,
+                strokeWidth: 2,
+              ),
+            ),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            color: const Color(0xFF2C2C2C),
+            child: const Center(
+              child: Icon(
+                Icons.video_library,
+                color: Colors.white54,
+                size: 60,
+              ),
+            ),
+          );
+        },
+      );
+    }
   }
 
   Widget _buildBufferingIndicator() {

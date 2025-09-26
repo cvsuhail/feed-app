@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/time_utils.dart';
 import '../../data/models/feed_model.dart';
 import '../../data/services/home_api_service.dart';
+import '../services/thumbnail_preloader.dart';
 import '../widgets/enhanced_video_player.dart';
 import 'add_feed_page.dart';
 
@@ -19,7 +22,9 @@ class _HomePageState extends State<HomePage> {
   late final Future<List<String>> _categoriesFuture;
   late final HomeApiService _apiService;
   int? _currentlyPlayingIndex;
+  VideoPlayerController? _currentVideoController;
   final ScrollController _scrollController = ScrollController();
+  Timer? _scrollDebounceTimer;
 
   @override
   void initState() {
@@ -31,51 +36,89 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    _scrollDebounceTimer?.cancel();
+    _currentVideoController?.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
   void _setupScrollListener() {
     _scrollController.addListener(() {
-      // Auto-pause video when scrolling away from current playing video
-      if (_currentlyPlayingIndex != null) {
-        final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
-        if (renderBox != null) {
-          final position = _scrollController.position;
-          final viewportHeight = position.viewportDimension;
-          final currentOffset = position.pixels;
-          
-          // Calculate approximate position of current playing video
-          final videoHeight = 460.0; // Approximate video height
-          final videoTop = _currentlyPlayingIndex! * videoHeight;
-          final videoBottom = videoTop + videoHeight;
-          
-          // If current playing video is not in viewport, pause it
-          if (videoBottom < currentOffset || videoTop > currentOffset + viewportHeight) {
-            setState(() {
-              _currentlyPlayingIndex = null;
-            });
-          }
+      // Debounce scroll events to improve performance
+      _scrollDebounceTimer?.cancel();
+      _scrollDebounceTimer = Timer(const Duration(milliseconds: 100), () {
+        _checkVideoVisibility();
+      });
+    });
+  }
+
+  void _checkVideoVisibility() {
+    // Auto-pause video when scrolling away from current playing video
+    if (_currentlyPlayingIndex != null) {
+      final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
+      if (renderBox != null) {
+        final position = _scrollController.position;
+        final viewportHeight = position.viewportDimension;
+        final currentOffset = position.pixels;
+        
+        // Calculate approximate position of current playing video
+        final videoHeight = 460.0; // Approximate video height
+        final videoTop = _currentlyPlayingIndex! * videoHeight;
+        final videoBottom = videoTop + videoHeight;
+        
+        // Add some buffer zone (50% of viewport) for smoother experience
+        final bufferZone = viewportHeight * 0.5;
+        final effectiveTop = videoTop - bufferZone;
+        final effectiveBottom = videoBottom + bufferZone;
+        
+        // If current playing video is not in effective viewport, pause it
+        if (effectiveBottom < currentOffset || effectiveTop > currentOffset + viewportHeight) {
+          setState(() {
+            _currentVideoController?.pause();
+            _currentVideoController?.dispose();
+            _currentVideoController = null;
+            _currentlyPlayingIndex = null;
+          });
         }
       }
-    });
+    }
   }
 
   void _onFilterChanged(String filter) {
     setState(() {
       _selectedFilter = filter;
-      _currentlyPlayingIndex = null; // Reset playing video when filter changes
+      // Stop current video when filter changes
+      _currentVideoController?.pause();
+      _currentVideoController?.dispose();
+      _currentVideoController = null;
+      _currentlyPlayingIndex = null;
     });
   }
 
   void _onVideoPlayPause(int index) {
     setState(() {
       if (_currentlyPlayingIndex == index) {
-        _currentlyPlayingIndex = null; // Pause current video
+        // Pause current video
+        _currentVideoController?.pause();
+        _currentlyPlayingIndex = null;
+        _currentVideoController = null;
       } else {
-        _currentlyPlayingIndex = index; // Play new video (this will auto-pause others)
+        // Stop any currently playing video
+        if (_currentVideoController != null) {
+          _currentVideoController!.pause();
+        }
+        
+        // Play new video
+        _currentlyPlayingIndex = index;
       }
     });
+  }
+
+  void _onVideoControllerReady(VideoPlayerController controller) {
+    // Only set the controller if this is the currently playing video
+    if (_currentlyPlayingIndex != null) {
+      _currentVideoController = controller;
+    }
   }
 
   @override
@@ -142,6 +185,7 @@ class _HomePageState extends State<HomePage> {
                 currentlyPlayingIndex: _currentlyPlayingIndex,
                 onVideoPlayPause: _onVideoPlayPause,
                 scrollController: _scrollController,
+                onControllerReady: _onVideoControllerReady,
               ),
             ),
           ],
@@ -377,6 +421,7 @@ class _FeedList extends StatefulWidget {
     required this.currentlyPlayingIndex,
     required this.onVideoPlayPause,
     required this.scrollController,
+    required this.onControllerReady,
   });
 
   final String selectedFilter;
@@ -384,6 +429,7 @@ class _FeedList extends StatefulWidget {
   final int? currentlyPlayingIndex;
   final ValueChanged<int> onVideoPlayPause;
   final ScrollController scrollController;
+  final Function(VideoPlayerController) onControllerReady;
 
   @override
   State<_FeedList> createState() => _FeedListState();
@@ -424,6 +470,9 @@ class _FeedListState extends State<_FeedList> {
           _isLoading = false;
           _error = null;
         });
+        
+        // Preload thumbnails for better user experience
+        _preloadThumbnails(feeds);
       }
     } catch (e) {
       if (mounted) {
@@ -432,6 +481,20 @@ class _FeedListState extends State<_FeedList> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  void _preloadThumbnails(List<FeedModel> feeds) {
+    final thumbnailUrls = feeds
+        .map((feed) => feed.thumbnail)
+        .where((url) => url.isNotEmpty)
+        .toList();
+    
+    if (thumbnailUrls.isNotEmpty) {
+      // Preload thumbnails in background
+      ThumbnailPreloader().preloadThumbnails(thumbnailUrls).catchError((error) {
+        debugPrint('Failed to preload thumbnails: $error');
+      });
     }
   }
 
@@ -510,6 +573,7 @@ class _FeedListState extends State<_FeedList> {
           feed: feed,
           isPlaying: widget.currentlyPlayingIndex == index,
           onPlayPause: () => widget.onVideoPlayPause(index),
+          onControllerReady: widget.onControllerReady,
         );
       },
     );
@@ -521,11 +585,13 @@ class _FeedCard extends StatelessWidget {
     required this.feed,
     required this.isPlaying,
     required this.onPlayPause,
+    required this.onControllerReady,
   });
 
   final FeedModel feed;
   final bool isPlaying;
   final VoidCallback onPlayPause;
+  final Function(VideoPlayerController) onControllerReady;
 
   @override
   Widget build(BuildContext context) {
@@ -604,6 +670,7 @@ class _FeedCard extends StatelessWidget {
             thumbnailUrl: feed.thumbnail,
             isPlaying: isPlaying,
             onPlayPause: onPlayPause,
+            onControllerReady: onControllerReady,
           ),
           const SizedBox(height: 12),
           // Description
